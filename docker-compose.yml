@@ -1,0 +1,16 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: abm_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: abm_user
+      POSTGRES_PASSWORD: abm_password
+      POSTGRES_DB: abm
+    ports:
+      - "5434:5432"
+    volumes:
+      - abm_postgres_data:/var/lib/postgresql/data
+
+volumes:
+  abm_postgres_data:
