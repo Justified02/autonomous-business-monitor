@@ -9,22 +9,19 @@ import (
 )
 
 type DailyMetric struct {
-	ID         pgtype.UUID        `db:"id" json:"id"`
-	Source     string             `db:"source" json:"source"`
-	MetricDate pgtype.Date        `db:"metric_date" json:"metric_date"`
-	Metrics    []byte             `db:"metrics" json:"metrics"`
-	CreatedAt  pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	ID             pgtype.UUID        `db:"id" json:"id"`
+	Source         string             `db:"source" json:"source"`
+	MetricDate     pgtype.Date        `db:"metric_date" json:"metric_date"`
+	Revenue        pgtype.Numeric     `db:"revenue" json:"revenue"`
+	FailedPayments int32              `db:"failed_payments" json:"failed_payments"`
+	CreatedAt      pgtype.Timestamptz `db:"created_at" json:"created_at"`
 }
 
 type Digest struct {
-	ID           pgtype.UUID        `db:"id" json:"id"`
-	GeneratedAt  pgtype.Timestamptz `db:"generated_at" json:"generated_at"`
-	SourcesCount int32              `db:"sources_count" json:"sources_count"`
-	AlertsCount  int32              `db:"alerts_count" json:"alerts_count"`
-	Content      string             `db:"content" json:"content"`
-	Payload      []byte             `db:"payload" json:"payload"`
-	Delivered    bool               `db:"delivered" json:"delivered"`
-	DeliveredAt  pgtype.Timestamptz `db:"delivered_at" json:"delivered_at"`
+	ID                pgtype.UUID        `db:"id" json:"id"`
+	Content           string             `db:"content" json:"content"`
+	GeneratedAt       pgtype.Timestamptz `db:"generated_at" json:"generated_at"`
+	HasCriticalAlerts bool               `db:"has_critical_alerts" json:"has_critical_alerts"`
 }
 
 type Snapshot struct {

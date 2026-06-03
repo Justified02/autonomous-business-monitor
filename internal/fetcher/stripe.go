@@ -5,13 +5,15 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"time"
+	//"time"
+
+	"github.com/Justified02/abm/internal/storage"
 )
 
 // StripeClient holds the HTTP client and API Key
 type StripeClient struct {
 	apiKey string
-	db     string
+	db     *storage.Store
 }
 
 func (c *StripeClient) Fetch(ctx context.Context) ([]byte, error) {
@@ -42,7 +44,7 @@ func (c *StripeClient) Fetch(ctx context.Context) ([]byte, error) {
 	return body, nil
 }
 
-func NewStripeClient(apiKey string, db string) *StripeClient {
+func NewStripeClient(apiKey string, db *storage.Store) *StripeClient {
 	newClient := &StripeClient{
 		apiKey: apiKey,
 		db:     db,

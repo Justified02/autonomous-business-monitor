@@ -6,18 +6,10 @@ package db
 
 import (
 	"context"
-
-	"github.com/jackc/pgx/v5/pgtype"
 )
 
 type Querier interface {
-	GetRecentDigests(ctx context.Context, limit int32) ([]GetRecentDigestsRow, error)
-	GetRecentSnapshots(ctx context.Context, arg GetRecentSnapshotsParams) ([]Snapshot, error)
-	GetRollingMetrics(ctx context.Context, arg GetRollingMetricsParams) ([]GetRollingMetricsRow, error)
-	MarkDigestDelivered(ctx context.Context, id pgtype.UUID) error
-	SaveDigest(ctx context.Context, arg SaveDigestParams) (SaveDigestRow, error)
-	SaveSnapshot(ctx context.Context, arg SaveSnapshotParams) error
-	UpsertDailyMetrics(ctx context.Context, arg UpsertDailyMetricsParams) error
+	GetLastSevenDays(ctx context.Context, source string) ([]DailyMetric, error)
 }
 
 var _ Querier = (*Queries)(nil)

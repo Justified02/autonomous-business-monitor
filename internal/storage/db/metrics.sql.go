@@ -7,38 +7,33 @@ package db
 
 import (
 	"context"
-
-	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const getRollingMetrics = `-- name: GetRollingMetrics :many
-SELECT metric_date, metrics
+const getLastSevenDays = `-- name: GetLastSevenDays :many
+SELECT id, source, metric_date, revenue, failed_payments, created_at 
 FROM daily_metrics
 WHERE source = $1
-    AND metric_date >= CURRENT_DATE - ($2::int * INTERVAL '1 day')
+AND metric_date >= NOW() - INTERVAL '7 days'
 ORDER BY metric_date DESC
 `
 
-type GetRollingMetricsParams struct {
-	Source  string `db:"source" json:"source"`
-	Column2 int32  `db:"column_2" json:"column_2"`
-}
-
-type GetRollingMetricsRow struct {
-	MetricDate pgtype.Date `db:"metric_date" json:"metric_date"`
-	Metrics    []byte      `db:"metrics" json:"metrics"`
-}
-
-func (q *Queries) GetRollingMetrics(ctx context.Context, arg GetRollingMetricsParams) ([]GetRollingMetricsRow, error) {
-	rows, err := q.db.Query(ctx, getRollingMetrics, arg.Source, arg.Column2)
+func (q *Queries) GetLastSevenDays(ctx context.Context, source string) ([]DailyMetric, error) {
+	rows, err := q.db.Query(ctx, getLastSevenDays, source)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []GetRollingMetricsRow{}
+	items := []DailyMetric{}
 	for rows.Next() {
-		var i GetRollingMetricsRow
-		if err := rows.Scan(&i.MetricDate, &i.Metrics); err != nil {
+		var i DailyMetric
+		if err := rows.Scan(
+			&i.ID,
+			&i.Source,
+			&i.MetricDate,
+			&i.Revenue,
+			&i.FailedPayments,
+			&i.CreatedAt,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -47,22 +42,4 @@ func (q *Queries) GetRollingMetrics(ctx context.Context, arg GetRollingMetricsPa
 		return nil, err
 	}
 	return items, nil
-}
-
-const upsertDailyMetrics = `-- name: UpsertDailyMetrics :exec
-INSERT INTO daily_metrics (source, metric_date, metrics)
-VALUES ($1, $2, $3)
-ON CONFLICT (source, metric_date)
-DO UPDATE SET metrics = EXCLUDED.metrics
-`
-
-type UpsertDailyMetricsParams struct {
-	Source     string      `db:"source" json:"source"`
-	MetricDate pgtype.Date `db:"metric_date" json:"metric_date"`
-	Metrics    []byte      `db:"metrics" json:"metrics"`
-}
-
-func (q *Queries) UpsertDailyMetrics(ctx context.Context, arg UpsertDailyMetricsParams) error {
-	_, err := q.db.Exec(ctx, upsertDailyMetrics, arg.Source, arg.MetricDate, arg.Metrics)
-	return err
 }

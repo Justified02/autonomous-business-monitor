@@ -2,19 +2,19 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
 	"os"
-	"os/signal"
-	"syscall"
 
-	"honnef.co/go/tools/config"
+	"github.com/Justified02/abm/config"
+	"github.com/Justified02/abm/internal/fetcher"
+	"github.com/Justified02/abm/internal/scheduler"
+	"github.com/Justified02/abm/internal/storage"
 )
 
 func main() {
 	// 1. Initialize structured logger
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
-		level: slog.LevelInfo,
+		Level: slog.LevelInfo,
 	}))
 	slog.SetDefault(logger)
 
@@ -39,47 +39,12 @@ func main() {
 
 	slog.Info("database connected")
 
+	// 4. Create new stripe client
+	stripeClient := fetcher.NewStripeClient(cfg.StripeKey, store)
 
-	// 4. Build the dependency chain - each component receives exactly what it needs - nothing more
-	stripeClient := fetcher.NewStripe(cfg.StripeKey)
-
-	llmClient, err := llm.New(cfg.LLMKey, "prompts/morning_digest.txt")
-	if err != nil {
-		slog.Error("failed to initialise llm client", "error", err)
-		os.Exit(1)
-	}
-
-	sched := scheduler.New(store, stripeClient, llmClient)
-
-
-	// 5. Run mode - RUN_NOW=true skips the cron schedule and fires immediately
-	if os.Getenv("RUN_NOW") == "true" {
-		slog.Info("RUN_NOW=true - running collection immediately")
-		err := sched.RunNow(ctx)
-		if err != nil {
-			slog.Error("collection failed", "error", err)
-			os.Exit(1)
-		}
-		return
-	}
+	// 5. Pass the stripeClient to the scheduler to create a new scheduler
+	newScheduler := scheduler.NewScheduler(stripeClient)
 
 	// 6. Start the scheduler
-	err = sched.Start(cfg.CronSchedule)
-	if err != nil {
-		slog.Error("failed to start scheduler", "error", err)
-		os.Exit(1)
-	}
-	defer sched.Stop()
-
-	slog.Info("scheduler running", "schedule", cfg.CronSchedule)
-
-
-	// 7. Graceful shutdown - blocks the main goroutine - keeps the program alive - until
-	// it receives SIGNIT (Ctrl+C from you) or SIGTERM (from Railway when it deploys a new version)
-	quit := make(chan os.Signal, 1)
-	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
-	sig := <-quit
-
-	slog.Info("shutdown signal received", "signal", sig.String())
-	slog.Info("shutdown complete")
+	newScheduler.Start(cfg.CronSchedule)
 }
