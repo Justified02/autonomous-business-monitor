@@ -14,6 +14,7 @@ type Config struct {
 	CronSchedule  string
 	N8NWebhookURL string
 	Port          string
+	LLMModel	  string
 }
 
 func Load() (*Config, error) {
@@ -25,6 +26,7 @@ func Load() (*Config, error) {
 		LLMKey:        os.Getenv("LLM_API_KEY"),
 		CronSchedule:  os.Getenv("CRON_SCHEDULE"),
 		N8NWebhookURL: os.Getenv("N8N_WEBHOOK_URL"),
+		LLMModel: 	   os.Getenv("LLM_MODEL"),
 	}
 
 	// Validate required fields
@@ -36,6 +38,9 @@ func Load() (*Config, error) {
 	}
 	if cfg.LLMKey == "" {
 		return nil, fmt.Errorf("LLM_API_KEY is required")
+	}
+	if cfg.LLMModel == "" {
+		return nil, fmt.Errorf("LLM_MODEL is required")
 	}
 
 	// Optional fields get sensible defaults

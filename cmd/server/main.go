@@ -6,7 +6,9 @@ import (
 	"os"
 
 	"github.com/Justified02/abm/config"
+	"github.com/Justified02/abm/internal/anomaly"
 	"github.com/Justified02/abm/internal/fetcher"
+	"github.com/Justified02/abm/internal/llm"
 	"github.com/Justified02/abm/internal/scheduler"
 	"github.com/Justified02/abm/internal/storage"
 )
@@ -39,11 +41,13 @@ func main() {
 
 	slog.Info("database connected")
 
-	// 4. Create new stripe client
+	// 4. Create all clients
 	stripeClient := fetcher.NewStripeClient(cfg.StripeKey, store)
+	engineClient := anomaly.NewEngine(store.Queries())
+	llmClient := llm.NewLLMClient(cfg.LLMKey, cfg.LLMModel)
 
 	// 5. Pass the stripeClient to the scheduler to create a new scheduler
-	newScheduler := scheduler.NewScheduler(stripeClient)
+	newScheduler := scheduler.NewScheduler(stripeClient, engineClient, llmClient, store)
 
 	// 6. Start the scheduler
 	newScheduler.Start(cfg.CronSchedule)

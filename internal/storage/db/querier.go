@@ -10,6 +10,9 @@ import (
 
 type Querier interface {
 	GetLastSevenDays(ctx context.Context, source string) ([]DailyMetric, error)
+	SaveDailyMetrics(ctx context.Context, arg SaveDailyMetricsParams) (DailyMetric, error)
+	SaveDigest(ctx context.Context, arg SaveDigestParams) (Digest, error)
+	SaveSnapshot(ctx context.Context, arg SaveSnapshotParams) (Snapshot, error)
 }
 
 var _ Querier = (*Queries)(nil)

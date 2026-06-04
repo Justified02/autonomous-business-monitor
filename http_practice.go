@@ -10,7 +10,7 @@ import (
 
 func main() {
 	// create context with timeout
-    ctx, cancel := context.WithTimeout(context.Background(), 1*time.Millisecond)
+    ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
     defer cancel()
 
 	// create request with context
