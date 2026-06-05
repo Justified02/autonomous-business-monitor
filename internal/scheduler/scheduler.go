@@ -10,6 +10,8 @@ import (
 	"github.com/Justified02/abm/internal/fetcher"
 	"github.com/Justified02/abm/internal/llm"
 	"github.com/Justified02/abm/internal/storage"
+	"github.com/Justified02/abm/internal/storage/db"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/robfig/cron/v3"
 )
 
@@ -64,6 +66,51 @@ func (s *Scheduler) fetchAllSources(ctx context.Context) {
 	revenue, failedCounts, err := s.stripe.Parse(result.data)
 	if err != nil {
 		fmt.Println("error parsing raw data:", err)
+		return
+	}
+
+	// save to daily_metrics
+	var pgRevenue pgtype.Numeric
+	pgRevenue.Scan(revenue)
+
+	_, err = s.db.Queries().SaveDailyMetrics(ctx, db.SaveDailyMetricsParams{
+		Source: "stripe",
+		MetricDate: pgtype.Date{Time: time.Now(), Valid: true},
+		Revenue: pgRevenue,
+		FailedPayments: int32(failedCounts),
+	})
+	if err != nil {
+		fmt.Println("error saving daily metrics:", err)
+		return
+	}
+
+	// run the anomaly engine
+	anomResult, err := s.engine.Analyze(ctx, "stripe", revenue)
+	if err != nil {
+		fmt.Println("error running anomaly engine:", err)
+		return
+	}
+
+	// Build the prompt
+	prompt := fmt.Sprintf(
+		"Generate a morning briefing. Stripe revenue today: $%.2f. Failed payments: %d. Anomaly detected: %v. Delta from 7-day average: %.2f%%.",
+		revenue, failedCounts, anomResult.IsAnomaly, anomResult.DeltaPct,
+	)
+
+	// call the llm
+	llmResp, err := s.llm.Generate(ctx, prompt)
+	if err != nil {
+		fmt.Println("error generating briefing:", err)
+		return
+	}
+
+	// save the digest to the db
+	_, err = s.db.Queries().SaveDigest(ctx, db.SaveDigestParams{
+		Content: llmResp,
+		HasCriticalAlerts: anomResult.IsAnomaly,
+	})
+	if err != nil {
+		fmt.Println("error saving digest:", err)
 		return
 	}
 }

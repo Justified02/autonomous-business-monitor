@@ -51,4 +51,11 @@ func main() {
 
 	// 6. Start the scheduler
 	newScheduler.Start(cfg.CronSchedule)
+
+	// on-demand run
+	if cfg.RunNow {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+		defer cancel()
+		newScheduler.FetchAllSources(ctx)
+	}
 }
