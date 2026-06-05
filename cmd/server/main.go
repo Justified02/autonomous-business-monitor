@@ -50,13 +50,13 @@ func main() {
 	// 5. Pass the stripeClient to the scheduler to create a new scheduler
 	newScheduler := scheduler.NewScheduler(stripeClient, engineClient, llmClient, store)
 
-	// 6. Start the scheduler
-	newScheduler.Start(cfg.CronSchedule)
-
 	// on-demand run
-	if cfg.RunNow == "true" {
+	if cfg.RunNow {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 		defer cancel()
 		newScheduler.FetchAllSources(ctx)
 	}
+
+	// 6. Start the scheduler
+	newScheduler.Start(cfg.CronSchedule)
 }

@@ -11,7 +11,7 @@ import (
 	"github.com/Justified02/abm/internal/llm"
 	"github.com/Justified02/abm/internal/storage"
 	"github.com/Justified02/abm/internal/storage/db"
-	"github.com/jackc/pgx/v5/pgtype"
+	//"github.com/jackc/pgx/v5/pgtype"
 	"github.com/robfig/cron/v3"
 )
 
@@ -41,6 +41,7 @@ func NewScheduler(s *fetcher.StripeClient, e *anomaly.Engine, l *llm.LLMClient, 
 // every morning, the scheduler needs to collect data from all sources (Stripe, Gmail, Calendly)
 // FetchAllSources means "run the data collection process"
 func (s *Scheduler) FetchAllSources(ctx context.Context) {
+	fmt.Println("starting fetch all sources...")
 	fetchedResult := make(chan fetchResult, 1)
 
 	go func() {
@@ -69,20 +70,23 @@ func (s *Scheduler) FetchAllSources(ctx context.Context) {
 		return
 	}
 
-	// save to daily_metrics
-	var pgRevenue pgtype.Numeric
-	pgRevenue.Scan(revenue)
+	fmt.Println("revenue:", revenue)
+	fmt.Println("failedCounts:", failedCounts)
 
-	_, err = s.db.Queries().SaveDailyMetrics(ctx, db.SaveDailyMetricsParams{
-		Source: "stripe",
-		MetricDate: pgtype.Date{Time: time.Now(), Valid: true},
-		Revenue: pgRevenue,
-		FailedPayments: int32(failedCounts),
-	})
-	if err != nil {
-		fmt.Println("error saving daily metrics:", err)
-		return
-	}
+	// save to daily_metrics
+	// var pgRevenue pgtype.Numeric
+	// pgRevenue.Scan(fmt.Sprintf("%.2f", revenue))
+
+	// _, err = s.db.Queries().SaveDailyMetrics(ctx, db.SaveDailyMetricsParams{
+	// 	Source: "stripe",
+	// 	MetricDate: pgtype.Date{Time: time.Now(), Valid: true},
+	// 	Revenue: pgRevenue,
+	// 	FailedPayments: int32(failedCounts),
+	// })
+	// if err != nil {
+	// 	fmt.Println("error saving daily metrics:", err)
+	// 	return
+	// }
 
 	// run the anomaly engine
 	anomResult, err := s.engine.Analyze(ctx, "stripe", revenue)
@@ -113,6 +117,8 @@ func (s *Scheduler) FetchAllSources(ctx context.Context) {
 		fmt.Println("error saving digest:", err)
 		return
 	}
+
+	fmt.Println("stripe fetch complete, err:", result.err)
 }
 
 // Start the cron job - call the fetchAllSources function in the process

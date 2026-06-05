@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"strconv"
 
 	"github.com/joho/godotenv"
 )
@@ -15,11 +16,13 @@ type Config struct {
 	N8NWebhookURL string
 	Port          string
 	LLMModel	  string
-	RunNow		  string
+	RunNow		  bool
 }
 
 func Load() (*Config, error) {
 	_ = godotenv.Load()
+
+	runNow, _ := strconv.ParseBool(os.Getenv("RUN_NOW"))
 
 	cfg := &Config{
 		DatabaseURL:   os.Getenv("DATABASE_URL"),
@@ -28,7 +31,7 @@ func Load() (*Config, error) {
 		CronSchedule:  os.Getenv("CRON_SCHEDULE"),
 		N8NWebhookURL: os.Getenv("N8N_WEBHOOK_URL"),
 		LLMModel: 	   os.Getenv("LLM_MODEL"),
-		RunNow:		   os.Getenv("RUN_NOW"),	
+		RunNow:		   runNow,
 	}
 
 	// Validate required fields
@@ -52,9 +55,9 @@ func Load() (*Config, error) {
 	if cfg.Port == "" {
 		cfg.Port = "8080"
 	}
-	if cfg.RunNow == "" {
-		cfg.RunNow = "false"
-	}
+	// if cfg.RunNow == false {
+	// 	cfg.RunNow = false
+	// }
 
 	return cfg, nil
 }
