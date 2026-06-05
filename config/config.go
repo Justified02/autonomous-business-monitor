@@ -15,6 +15,7 @@ type Config struct {
 	N8NWebhookURL string
 	Port          string
 	LLMModel	  string
+	RunNow		  string
 }
 
 func Load() (*Config, error) {
@@ -27,6 +28,7 @@ func Load() (*Config, error) {
 		CronSchedule:  os.Getenv("CRON_SCHEDULE"),
 		N8NWebhookURL: os.Getenv("N8N_WEBHOOK_URL"),
 		LLMModel: 	   os.Getenv("LLM_MODEL"),
+		RunNow:		   os.Getenv("RUN_NOW"),	
 	}
 
 	// Validate required fields
@@ -49,6 +51,9 @@ func Load() (*Config, error) {
 	}
 	if cfg.Port == "" {
 		cfg.Port = "8080"
+	}
+	if cfg.RunNow == "" {
+		cfg.RunNow = "false"
 	}
 
 	return cfg, nil

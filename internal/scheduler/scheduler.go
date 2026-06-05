@@ -39,8 +39,8 @@ func NewScheduler(s *fetcher.StripeClient, e *anomaly.Engine, l *llm.LLMClient, 
 }
 
 // every morning, the scheduler needs to collect data from all sources (Stripe, Gmail, Calendly)
-// fetchAllSources means "run the data collection process"
-func (s *Scheduler) fetchAllSources(ctx context.Context) {
+// FetchAllSources means "run the data collection process"
+func (s *Scheduler) FetchAllSources(ctx context.Context) {
 	fetchedResult := make(chan fetchResult, 1)
 
 	go func() {
@@ -125,7 +125,7 @@ func (s *Scheduler) Start(cronSchedule string) {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 		defer cancel()
 
-		s.fetchAllSources(ctx)
+		s.FetchAllSources(ctx)
 	})
 	if err != nil {
 		fmt.Println("adding cron job:", err)

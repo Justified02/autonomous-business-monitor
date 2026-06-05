@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 	"os"
+	"time"
 
 	"github.com/Justified02/abm/config"
 	"github.com/Justified02/abm/internal/anomaly"
@@ -53,7 +54,7 @@ func main() {
 	newScheduler.Start(cfg.CronSchedule)
 
 	// on-demand run
-	if cfg.RunNow {
+	if cfg.RunNow == "true" {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 		defer cancel()
 		newScheduler.FetchAllSources(ctx)
