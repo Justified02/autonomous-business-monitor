@@ -19,6 +19,8 @@ type Config struct {
 	GmailClientID	  string
 	GmailClientSecret  string
 	GmailRefreshToken  string
+	CalendlyAPIKey string
+	CalendlyUserUri string
 	RunNow		  bool
 }
 
@@ -37,6 +39,8 @@ func Load() (*Config, error) {
 		GmailClientID: 	   os.Getenv("GMAIL_CLIENT_ID"),
 		GmailClientSecret:  os.Getenv("GMAIL_CLIENT_SECRET"),
 		GmailRefreshToken:  os.Getenv("GMAIL_REFRESH_TOKEN"),
+		CalendlyAPIKey: os.Getenv("CALENDLY_API_KEY"),
+		CalendlyUserUri: os.Getenv("CALENDLY_USER_URI"),
 		RunNow:		   runNow,
 	}
 
@@ -61,6 +65,12 @@ func Load() (*Config, error) {
 	}
 	if cfg.GmailRefreshToken == "" {
 		return nil, fmt.Errorf("REFRESH_TOKEN is required")
+	}
+	if cfg.CalendlyAPIKey == "" {
+		return nil, fmt.Errorf("CALENDLY_API_KEY is required")
+	}
+	if cfg.CalendlyUserUri == "" {
+		return nil, fmt.Errorf("CALENDLY_USER_URI is required")
 	}
 
 	// Optional fields get sensible defaults

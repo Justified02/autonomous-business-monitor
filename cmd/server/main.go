@@ -47,9 +47,10 @@ func main() {
 	engineClient := anomaly.NewEngine(store.Queries())
 	llmClient := llm.NewLLMClient(cfg.LLMKey, cfg.LLMModel)
 	gmailClient := fetcher.NewGmailClient(cfg.GmailClientID, cfg.GmailClientSecret, cfg.GmailRefreshToken, store)
+	calendlyClient := fetcher.NewCalendlyClient(cfg.CalendlyAPIKey, cfg.CalendlyUserUri, store)
 
 	// 5. Pass the Clients to the scheduler to create a new scheduler
-	newScheduler := scheduler.NewScheduler(stripeClient, engineClient, llmClient, store, gmailClient)
+	newScheduler := scheduler.NewScheduler(stripeClient, engineClient, llmClient, store, gmailClient, calendlyClient)
 
 	// on-demand run
 	if cfg.RunNow {

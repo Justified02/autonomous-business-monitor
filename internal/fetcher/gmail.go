@@ -10,6 +10,8 @@ import (
 	"strings"
 
 	"github.com/Justified02/abm/internal/storage"
+	"github.com/Justified02/abm/internal/storage/db"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 // GmailCLient struct
@@ -17,7 +19,7 @@ type GmailClient struct {
 	GmailClientID     string
 	GmailClientSecret string
 	GmailRefreshToken string
-	db 				  *storage.Store
+	db                *storage.Store
 }
 
 // Token response struct
@@ -28,10 +30,10 @@ type tokenResponse struct {
 // new GmailClient constructor
 func NewGmailClient(clientID string, clientSecret string, refreshToken string, db *storage.Store) *GmailClient {
 	newClient := &GmailClient{
-		GmailClientID: clientID,
+		GmailClientID:     clientID,
 		GmailClientSecret: clientSecret,
 		GmailRefreshToken: refreshToken,
-		db:			  db,
+		db:                db,
 	}
 
 	return newClient
@@ -62,7 +64,7 @@ func (c *GmailClient) getAccessToken(ctx context.Context) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("error making request: %w", err)
 	}
-	
+
 	defer resp.Body.Close()
 
 	if resp.StatusCode != 200 {
@@ -93,7 +95,7 @@ func (c *GmailClient) Fetch(ctx context.Context) ([]byte, error) {
 	}
 
 	// set auth header
-	req.Header.Set("Authorization", "Bearer " + accessToken)
+	req.Header.Set("Authorization", "Bearer "+accessToken)
 
 	// define http client
 	client := &http.Client{}
@@ -111,4 +113,18 @@ func (c *GmailClient) Fetch(ctx context.Context) ([]byte, error) {
 
 	body, _ := io.ReadAll(resp.Body)
 	return body, nil
+}
+
+func (c *GmailClient) Save(ctx context.Context, data []byte) error {
+	_, err := c.db.Queries().SaveSnapshot(ctx, db.SaveSnapshotParams{
+		Source:      "gmail",
+		Data:        data,
+		PeriodStart: pgtype.Timestamptz{},
+		PeriodEnd:   pgtype.Timestamptz{},
+	})
+	if err != nil {
+		return fmt.Errorf("cannot save snapshot to the db: %w", err)
+	}
+
+	return nil
 }

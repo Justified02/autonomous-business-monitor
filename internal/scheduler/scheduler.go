@@ -17,25 +17,27 @@ import (
 
 type fetchResult struct {
 	source string
-	data []byte
-	err  error
+	data   []byte
+	err    error
 }
 
 type Scheduler struct {
-	stripe *fetcher.StripeClient
-	gmail  *fetcher.GmailClient
-	engine *anomaly.Engine
-	llm    *llm.LLMClient
-	db     *storage.Store
+	stripe   *fetcher.StripeClient
+	gmail    *fetcher.GmailClient
+	calendly *fetcher.CalendlyClient
+	engine   *anomaly.Engine
+	llm      *llm.LLMClient
+	db       *storage.Store
 }
 
-func NewScheduler(s *fetcher.StripeClient, e *anomaly.Engine, l *llm.LLMClient, db  *storage.Store, g *fetcher.GmailClient) *Scheduler {
+func NewScheduler(s *fetcher.StripeClient, e *anomaly.Engine, l *llm.LLMClient, db *storage.Store, g *fetcher.GmailClient, c *fetcher.CalendlyClient) *Scheduler {
 	newScheduler := &Scheduler{
-		stripe: s,
-		engine: e,
-		llm:    l,
-		db:		db,
-		gmail:  g,
+		stripe:   s,
+		engine:   e,
+		llm:      l,
+		db:       db,
+		gmail:    g,
+		calendly: c,
 	}
 
 	return newScheduler
@@ -45,7 +47,7 @@ func NewScheduler(s *fetcher.StripeClient, e *anomaly.Engine, l *llm.LLMClient, 
 // FetchAllSources means "run the data collection process"
 func (s *Scheduler) FetchAllSources(ctx context.Context) {
 	fmt.Println("starting fetch all sources...")
-	fetchedResult := make(chan fetchResult, 2)
+	fetchedResult := make(chan fetchResult, 3)
 
 	go func() {
 		data, err := s.stripe.Fetch(ctx)
@@ -57,97 +59,130 @@ func (s *Scheduler) FetchAllSources(ctx context.Context) {
 		fetchedResult <- fetchResult{source: "gmail", data: data, err: err}
 	}()
 
-	for i := 0; i < 2; i++ {
-		result := <- fetchedResult
+	go func() {
+		data, err := s.calendly.Fetch(ctx)
+		fetchedResult <- fetchResult{source: "calendly", data: data, err: err}
+	}()
+
+	var stripeRevenue float64
+	var stripeFailedPayments int
+	var stripeAnomaly anomaly.AnomalyResult
+	var calendlyEvents []byte
+	var gmailMessages []byte
+
+	for i := 0; i < 3; i++ {
+		result := <-fetchedResult
 		if result.err != nil {
 			fmt.Println(result.source, "fetch error:", result.err)
-			continue  // skip this source, don't return
+			continue // skip this source, don't return
 		}
-		
+
 		if result.source == "stripe" {
-			result = <- result.data
-		
+			fmt.Println("processing stripe data...")
+			// save the stripe snapshot
+			err := s.stripe.Save(ctx, result.data)
+			if err != nil {
+				fmt.Println("error saving snapshot:", err)
+				continue
+			}
+			fmt.Println("stripe snapshot saved successfully")
+
+			// parse the stripe raw data
+			revenue, failedCounts, err := s.stripe.Parse(result.data)
+			if err != nil {
+				fmt.Println("error parsing raw data:", err)
+				continue
+			}
+
+			// save to daily_metrics
+			var pgRevenue pgtype.Numeric
+			pgRevenue.Scan(fmt.Sprintf("%.2f", revenue))
+
+			_, err = s.db.Queries().SaveDailyMetrics(ctx, db.SaveDailyMetricsParams{
+				Source:         "stripe",
+				MetricDate:     pgtype.Date{Time: time.Now(), Valid: true},
+				Revenue:        pgRevenue,
+				FailedPayments: int32(failedCounts),
+			})
+			if err != nil {
+				fmt.Println("error saving daily metrics:", err)
+				continue
+			}
+
+			// run the anomaly engine
+			anomResult, err := s.engine.Analyze(ctx, "stripe", revenue)
+			if err != nil {
+				fmt.Println("error running anomaly engine:", err)
+				continue
+			}
+
+			stripeRevenue = revenue
+			stripeFailedPayments = failedCounts
+			stripeAnomaly = anomResult
+
+			fmt.Println("stripe fetch complete, err:", result.err)
+
 		} else if result.source == "gmail" {
-			result = <- result.data
+			fmt.Println("gmail data received, length:", len(result.data))
+
+			// save gmail snapshot
+			err := s.gmail.Save(ctx, result.data)
+			if err != nil {
+				fmt.Println("error saving gmail snapshot:", err)
+				continue
+			}
+			fmt.Println("gmail snapshot saved successfully")
+
+			gmailMessages = result.data
+
+		} else if result.source == "calendly" {
+			fmt.Println("calendly data received, length:", len(result.data))
+
+			// save calendly snapshot
+			err := s.calendly.Save(ctx, result.data)
+			if err != nil {
+				fmt.Println("error saving calendly snashot:", err)
+				continue
+			}
+			fmt.Println("calendly snapshot saved sucessfully")
+			
+			calendlyEvents = result.data
 		}
 	}
 
-	result1 := <- fetchedResult
-	result2 := <- fetchedResult
-
-	if result1.err != nil {
-		fmt.Println("error fetching data:", result1.err)
-		return
+	digestData := llm.DigestData{
+		StripeRevenue: stripeRevenue,
+		StripeFailedPayments: stripeFailedPayments,
+		StripeAnomaly: stripeAnomaly.IsAnomaly,
+		StripeDelta: stripeAnomaly.DeltaPct,
+		CalendlyEvents: string(calendlyEvents),
+		GmailMessages: string(gmailMessages),
 	}
 
-	if result2.err != nil {
-		fmt.Println("error fetching data:", result2.err)
-		return
-	}
-
-	// Save the stripe snapshot
-	err := s.stripe.Save(ctx, result.data)
+	// build prompt from template
+	prompt, err := llm.BuildPrompt(digestData, "prompts/morning_digest.txt")
 	if err != nil {
-		fmt.Println("error saving snapshot:", err)
+		fmt.Println("error building prompt:", err)
 		return
 	}
-
-	// Parse the raw data
-	revenue, failedCounts, err := s.stripe.Parse(result.data)
-	if err != nil {
-		fmt.Println("error parsing raw data:", err)
-		return
-	}
-
-	fmt.Println("revenue:", revenue)
-	fmt.Println("failedCounts:", failedCounts)
-
-	// save to daily_metrics
-	var pgRevenue pgtype.Numeric
-	pgRevenue.Scan(fmt.Sprintf("%.2f", revenue))
-
-	_, err = s.db.Queries().SaveDailyMetrics(ctx, db.SaveDailyMetricsParams{
-		Source: "stripe",
-		MetricDate: pgtype.Date{Time: time.Now(), Valid: true},
-		Revenue: pgRevenue,
-		FailedPayments: int32(failedCounts),
-	})
-	if err != nil {
-		fmt.Println("error saving daily metrics:", err)
-		return
-	}
-
-	// run the anomaly engine
-	anomResult, err := s.engine.Analyze(ctx, "stripe", revenue)
-	if err != nil {
-		fmt.Println("error running anomaly engine:", err)
-		return
-	}
-
-	// Build the prompt
-	prompt := fmt.Sprintf(
-		"Generate a morning briefing. Stripe revenue today: $%.2f. Failed payments: %d. Anomaly detected: %v. Delta from 7-day average: %.2f%%.",
-		revenue, failedCounts, anomResult.IsAnomaly, anomResult.DeltaPct,
-	)
 
 	// call the llm
 	llmResp, err := s.llm.Generate(ctx, prompt)
-	if err != nil {
-		fmt.Println("error generating briefing:", err)
+	if err != nil{
+		fmt.Println("error building prompt:", err)
 		return
 	}
 
-	// save the digest to the db
+	// save the digest
 	_, err = s.db.Queries().SaveDigest(ctx, db.SaveDigestParams{
-		Content: llmResp,
-		HasCriticalAlerts: anomResult.IsAnomaly,
+		Content: 		llmResp,
+		HasCriticalAlerts: stripeAnomaly.IsAnomaly,
 	})
 	if err != nil {
 		fmt.Println("error saving digest:", err)
 		return
 	}
-
-	fmt.Println("stripe fetch complete, err:", result.err)
+	fmt.Println("digest saved successfully")
 }
 
 // Start the cron job - call the fetchAllSources function in the process

@@ -9,3 +9,19 @@ Your output must always have exactly three sections:
 Be specific with numbers. Name customers when data is available.
 Flag anomalies in plain English. Keep the entire briefing under 300 words.
 Suggest one concrete action per urgent item.
+
+Generate a morning business briefing based on the following data:
+
+STRIPE:
+- Revenue today: ${{.StripeRevenue}}
+- Failed payments: {{.StripeFailedPayments}}
+- Anomaly detected: {{.StripeAnomaly}}
+- Delta from 7-day average: {{.StripeDelta}}%
+
+CALENDLY:
+- Scheduled events: {{.CalendlyEvents}}
+
+GMAIL:
+- Messages: {{.GmailMessages}}
+
+Write a concise, professional morning briefing.
