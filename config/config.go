@@ -16,6 +16,9 @@ type Config struct {
 	N8NWebhookURL string
 	Port          string
 	LLMModel	  string
+	GmailClientID	  string
+	GmailClientSecret  string
+	GmailRefreshToken  string
 	RunNow		  bool
 }
 
@@ -31,6 +34,9 @@ func Load() (*Config, error) {
 		CronSchedule:  os.Getenv("CRON_SCHEDULE"),
 		N8NWebhookURL: os.Getenv("N8N_WEBHOOK_URL"),
 		LLMModel: 	   os.Getenv("LLM_MODEL"),
+		GmailClientID: 	   os.Getenv("GMAIL_CLIENT_ID"),
+		GmailClientSecret:  os.Getenv("GMAIL_CLIENT_SECRET"),
+		GmailRefreshToken:  os.Getenv("GMAIL_REFRESH_TOKEN"),
 		RunNow:		   runNow,
 	}
 
@@ -46,6 +52,15 @@ func Load() (*Config, error) {
 	}
 	if cfg.LLMModel == "" {
 		return nil, fmt.Errorf("LLM_MODEL is required")
+	}
+	if cfg.GmailClientID == "" {
+		return nil, fmt.Errorf("CLIENT_ID is required")
+	}
+	if cfg.GmailClientSecret == "" {
+		return nil, fmt.Errorf("CLIENT_SECRET is required")
+	}
+	if cfg.GmailRefreshToken == "" {
+		return nil, fmt.Errorf("REFRESH_TOKEN is required")
 	}
 
 	// Optional fields get sensible defaults

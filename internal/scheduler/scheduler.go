@@ -11,28 +11,31 @@ import (
 	"github.com/Justified02/abm/internal/llm"
 	"github.com/Justified02/abm/internal/storage"
 	"github.com/Justified02/abm/internal/storage/db"
-	//"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/robfig/cron/v3"
 )
 
 type fetchResult struct {
+	source string
 	data []byte
 	err  error
 }
 
 type Scheduler struct {
 	stripe *fetcher.StripeClient
+	gmail  *fetcher.GmailClient
 	engine *anomaly.Engine
 	llm    *llm.LLMClient
 	db     *storage.Store
 }
 
-func NewScheduler(s *fetcher.StripeClient, e *anomaly.Engine, l *llm.LLMClient, db  *storage.Store) *Scheduler {
+func NewScheduler(s *fetcher.StripeClient, e *anomaly.Engine, l *llm.LLMClient, db  *storage.Store, g *fetcher.GmailClient) *Scheduler {
 	newScheduler := &Scheduler{
 		stripe: s,
 		engine: e,
 		llm:    l,
 		db:		db,
+		gmail:  g,
 	}
 
 	return newScheduler
@@ -42,17 +45,43 @@ func NewScheduler(s *fetcher.StripeClient, e *anomaly.Engine, l *llm.LLMClient, 
 // FetchAllSources means "run the data collection process"
 func (s *Scheduler) FetchAllSources(ctx context.Context) {
 	fmt.Println("starting fetch all sources...")
-	fetchedResult := make(chan fetchResult, 1)
+	fetchedResult := make(chan fetchResult, 2)
 
 	go func() {
 		data, err := s.stripe.Fetch(ctx)
-		fetchedResult <- fetchResult{data: data, err: err}
+		fetchedResult <- fetchResult{source: "stripe", data: data, err: err}
 	}()
 
-	result := <-fetchedResult
+	go func() {
+		data, err := s.gmail.Fetch(ctx)
+		fetchedResult <- fetchResult{source: "gmail", data: data, err: err}
+	}()
 
-	if result.err != nil {
-		fmt.Println("error fetching data:", result.err)
+	for i := 0; i < 2; i++ {
+		result := <- fetchedResult
+		if result.err != nil {
+			fmt.Println(result.source, "fetch error:", result.err)
+			continue  // skip this source, don't return
+		}
+		
+		if result.source == "stripe" {
+			result = <- result.data
+		
+		} else if result.source == "gmail" {
+			result = <- result.data
+		}
+	}
+
+	result1 := <- fetchedResult
+	result2 := <- fetchedResult
+
+	if result1.err != nil {
+		fmt.Println("error fetching data:", result1.err)
+		return
+	}
+
+	if result2.err != nil {
+		fmt.Println("error fetching data:", result2.err)
 		return
 	}
 
@@ -74,19 +103,19 @@ func (s *Scheduler) FetchAllSources(ctx context.Context) {
 	fmt.Println("failedCounts:", failedCounts)
 
 	// save to daily_metrics
-	// var pgRevenue pgtype.Numeric
-	// pgRevenue.Scan(fmt.Sprintf("%.2f", revenue))
+	var pgRevenue pgtype.Numeric
+	pgRevenue.Scan(fmt.Sprintf("%.2f", revenue))
 
-	// _, err = s.db.Queries().SaveDailyMetrics(ctx, db.SaveDailyMetricsParams{
-	// 	Source: "stripe",
-	// 	MetricDate: pgtype.Date{Time: time.Now(), Valid: true},
-	// 	Revenue: pgRevenue,
-	// 	FailedPayments: int32(failedCounts),
-	// })
-	// if err != nil {
-	// 	fmt.Println("error saving daily metrics:", err)
-	// 	return
-	// }
+	_, err = s.db.Queries().SaveDailyMetrics(ctx, db.SaveDailyMetricsParams{
+		Source: "stripe",
+		MetricDate: pgtype.Date{Time: time.Now(), Valid: true},
+		Revenue: pgRevenue,
+		FailedPayments: int32(failedCounts),
+	})
+	if err != nil {
+		fmt.Println("error saving daily metrics:", err)
+		return
+	}
 
 	// run the anomaly engine
 	anomResult, err := s.engine.Analyze(ctx, "stripe", revenue)
