@@ -3,15 +3,19 @@ package main
 import (
 	"context"
 	"log/slog"
+	"net/http"
 	"os"
 	"time"
 
 	"github.com/Justified02/abm/config"
 	"github.com/Justified02/abm/internal/anomaly"
+	"github.com/Justified02/abm/internal/api"
 	"github.com/Justified02/abm/internal/fetcher"
 	"github.com/Justified02/abm/internal/llm"
+	"github.com/Justified02/abm/internal/notify"
 	"github.com/Justified02/abm/internal/scheduler"
 	"github.com/Justified02/abm/internal/storage"
+	"github.com/go-chi/chi/v5"
 )
 
 func main() {
@@ -48,9 +52,10 @@ func main() {
 	llmClient := llm.NewLLMClient(cfg.LLMKey, cfg.LLMModel)
 	gmailClient := fetcher.NewGmailClient(cfg.GmailClientID, cfg.GmailClientSecret, cfg.GmailRefreshToken, store)
 	calendlyClient := fetcher.NewCalendlyClient(cfg.CalendlyAPIKey, cfg.CalendlyUserUri, store)
+	webhookClient := notify.NewWebhookClient(cfg.N8NWebhookURL)
 
 	// 5. Pass the Clients to the scheduler to create a new scheduler
-	newScheduler := scheduler.NewScheduler(stripeClient, engineClient, llmClient, store, gmailClient, calendlyClient)
+	newScheduler := scheduler.NewScheduler(stripeClient, engineClient, llmClient, store, gmailClient, calendlyClient, webhookClient)
 
 	// on-demand run
 	if cfg.RunNow {
@@ -58,6 +63,17 @@ func main() {
 		defer cancel()
 		newScheduler.FetchAllSources(ctx)
 	}
+
+	// REST API
+	handler := api.NewHandler(store.Queries())
+	r := chi.NewRouter()
+	r.Get("/digest/history", handler.GetDigestHistory)
+	r.Get("/metrics/trend", handler.GetMetricsTrend)
+
+	go func() {
+		slog.Info("API server starting", "port", cfg.Port)
+		http.ListenAndServe(":"+cfg.Port, r)
+	}()
 
 	// 6. Start the scheduler
 	newScheduler.Start(cfg.CronSchedule)

@@ -43,3 +43,70 @@ func (q *Queries) GetLastSevenDays(ctx context.Context, source string) ([]DailyM
 	}
 	return items, nil
 }
+
+const getMetricsTrend = `-- name: GetMetricsTrend :many
+SELECT id, source, metric_date, revenue, failed_payments, created_at
+FROM daily_metrics
+WHERE source = $1
+ORDER BY metric_date DESC
+LIMIT 30
+`
+
+func (q *Queries) GetMetricsTrend(ctx context.Context, source string) ([]DailyMetric, error) {
+	rows, err := q.db.Query(ctx, getMetricsTrend, source)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []DailyMetric{}
+	for rows.Next() {
+		var i DailyMetric
+		if err := rows.Scan(
+			&i.ID,
+			&i.Source,
+			&i.MetricDate,
+			&i.Revenue,
+			&i.FailedPayments,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getPastDigests = `-- name: GetPastDigests :many
+SELECT id, content, generated_at, has_critical_alerts
+FROM digests
+ORDER BY generated_at DESC
+LIMIT 30
+`
+
+func (q *Queries) GetPastDigests(ctx context.Context) ([]Digest, error) {
+	rows, err := q.db.Query(ctx, getPastDigests)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Digest{}
+	for rows.Next() {
+		var i Digest
+		if err := rows.Scan(
+			&i.ID,
+			&i.Content,
+			&i.GeneratedAt,
+			&i.HasCriticalAlerts,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}

@@ -10,6 +10,8 @@ import (
 
 type Querier interface {
 	GetLastSevenDays(ctx context.Context, source string) ([]DailyMetric, error)
+	GetMetricsTrend(ctx context.Context, source string) ([]DailyMetric, error)
+	GetPastDigests(ctx context.Context) ([]Digest, error)
 	SaveDailyMetrics(ctx context.Context, arg SaveDailyMetricsParams) (DailyMetric, error)
 	SaveDigest(ctx context.Context, arg SaveDigestParams) (Digest, error)
 	SaveSnapshot(ctx context.Context, arg SaveSnapshotParams) (Snapshot, error)

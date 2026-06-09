@@ -9,6 +9,7 @@ import (
 	"github.com/Justified02/abm/internal/anomaly"
 	"github.com/Justified02/abm/internal/fetcher"
 	"github.com/Justified02/abm/internal/llm"
+	"github.com/Justified02/abm/internal/notify"
 	"github.com/Justified02/abm/internal/storage"
 	"github.com/Justified02/abm/internal/storage/db"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -28,9 +29,10 @@ type Scheduler struct {
 	engine   *anomaly.Engine
 	llm      *llm.LLMClient
 	db       *storage.Store
+	webhook  *notify.WebhookClient
 }
 
-func NewScheduler(s *fetcher.StripeClient, e *anomaly.Engine, l *llm.LLMClient, db *storage.Store, g *fetcher.GmailClient, c *fetcher.CalendlyClient) *Scheduler {
+func NewScheduler(s *fetcher.StripeClient, e *anomaly.Engine, l *llm.LLMClient, db *storage.Store, g *fetcher.GmailClient, c *fetcher.CalendlyClient, w *notify.WebhookClient) *Scheduler {
 	newScheduler := &Scheduler{
 		stripe:   s,
 		engine:   e,
@@ -38,6 +40,7 @@ func NewScheduler(s *fetcher.StripeClient, e *anomaly.Engine, l *llm.LLMClient, 
 		db:       db,
 		gmail:    g,
 		calendly: c,
+		webhook: w,
 	}
 
 	return newScheduler
@@ -145,18 +148,18 @@ func (s *Scheduler) FetchAllSources(ctx context.Context) {
 				continue
 			}
 			fmt.Println("calendly snapshot saved sucessfully")
-			
+
 			calendlyEvents = result.data
 		}
 	}
 
 	digestData := llm.DigestData{
-		StripeRevenue: stripeRevenue,
+		StripeRevenue:        stripeRevenue,
 		StripeFailedPayments: stripeFailedPayments,
-		StripeAnomaly: stripeAnomaly.IsAnomaly,
-		StripeDelta: stripeAnomaly.DeltaPct,
-		CalendlyEvents: string(calendlyEvents),
-		GmailMessages: string(gmailMessages),
+		StripeAnomaly:        stripeAnomaly.IsAnomaly,
+		StripeDelta:          stripeAnomaly.DeltaPct,
+		CalendlyEvents:       string(calendlyEvents),
+		GmailMessages:        string(gmailMessages),
 	}
 
 	// build prompt from template
@@ -168,14 +171,14 @@ func (s *Scheduler) FetchAllSources(ctx context.Context) {
 
 	// call the llm
 	llmResp, err := s.llm.Generate(ctx, prompt)
-	if err != nil{
-		fmt.Println("error building prompt:", err)
+	if err != nil {
+		fmt.Println("error generating brief:", err)
 		return
 	}
 
 	// save the digest
 	_, err = s.db.Queries().SaveDigest(ctx, db.SaveDigestParams{
-		Content: 		llmResp,
+		Content:           llmResp,
 		HasCriticalAlerts: stripeAnomaly.IsAnomaly,
 	})
 	if err != nil {
@@ -183,6 +186,10 @@ func (s *Scheduler) FetchAllSources(ctx context.Context) {
 		return
 	}
 	fmt.Println("digest saved successfully")
+
+	// send the digest
+	s.webhook.Send(ctx, llmResp, stripeAnomaly.IsAnomaly)
+	fmt.Println("webhook payload sent successfully")
 }
 
 // Start the cron job - call the fetchAllSources function in the process
